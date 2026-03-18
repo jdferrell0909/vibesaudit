@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#fafafa"/>
+  <rect x="0" y="0" width="1200" height="4" fill="#534AB7"/>
+  <text x="600" y="260" text-anchor="middle" font-size="72" font-family="system-ui, sans-serif" font-weight="700" fill="#171717">vibes audit</text>
+  <text x="600" y="330" text-anchor="middle" font-size="24" font-family="system-ui, sans-serif" fill="#6b7280">Paste any text. Get its vibe forensically deconstructed.</text>
+  <text x="600" y="400" text-anchor="middle" font-size="18" font-family="system-ui, sans-serif" fill="#534AB7">vibesaudit.com</text>
+</svg>
