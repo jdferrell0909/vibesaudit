@@ -1,9 +1,8 @@
 import { z } from "zod";
-import { escapeHtml } from "./sanitize";
 
 const scoreSchema = z.number().min(0).max(100).transform(Math.round);
-const safeString = z.string().max(500).transform(escapeHtml);
-const shortString = z.string().max(100).transform(escapeHtml);
+const safeString = z.string().max(500);
+const shortString = z.string().max(100);
 
 export const vibeResultSchema = z.object({
   overallVibe: shortString,
