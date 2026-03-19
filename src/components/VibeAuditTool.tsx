@@ -153,6 +153,7 @@ export default function VibeAuditTool() {
       {/* Loading skeleton */}
       {loading && (
         <div className="mt-8 space-y-6">
+          {/* Verdict card */}
           <div className="p-6 rounded-2xl bg-gray-50 border border-gray-100">
             <div className="flex flex-col items-center gap-3">
               <div className="w-12 h-12 rounded-full shimmer" />
@@ -165,11 +166,23 @@ export default function VibeAuditTool() {
               <div className="h-12 w-full max-w-md rounded shimmer mt-2" />
             </div>
           </div>
+          {/* Author archetype */}
           <div className="p-4 rounded-xl bg-gray-50 border border-gray-100">
             <div className="h-4 w-24 rounded shimmer mb-2" />
             <div className="h-5 w-64 rounded shimmer" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Score rings — mobile only */}
+          <div className="grid grid-cols-3 gap-6 max-w-[480px] mx-auto md:hidden">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5">
+                <div className="w-16 h-16 rounded-full shimmer" />
+                <div className="h-3 w-20 rounded shimmer" />
+                <div className="h-3 w-24 rounded shimmer" />
+              </div>
+            ))}
+          </div>
+          {/* Score bars + vibe labels — desktop only */}
+          <div className="hidden md:grid grid-cols-2 gap-8 max-w-[630px] mx-auto">
             <div className="space-y-3">
               <div className="h-4 w-32 rounded shimmer mb-2" />
               {Array.from({ length: 6 }, (_, i) => (
@@ -182,9 +195,20 @@ export default function VibeAuditTool() {
                 </div>
               ))}
             </div>
-            <div className="flex flex-col items-center">
-              <div className="h-4 w-20 rounded shimmer mb-4 self-start" />
-              <div className="w-64 h-64 rounded-full shimmer" />
+            <div className="space-y-3">
+              <div className="h-4 w-24 rounded shimmer mb-2" />
+              {Array.from({ length: 6 }, (_, i) => (
+                <div key={i} className="h-[44px] flex items-start">
+                  <div className="h-4 w-40 rounded shimmer" />
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Radar chart */}
+          <div>
+            <div className="h-4 w-20 rounded shimmer mb-4" />
+            <div className="flex justify-center">
+              <div className="w-[280px] h-[280px] rounded-full shimmer" />
             </div>
           </div>
         </div>
@@ -193,7 +217,7 @@ export default function VibeAuditTool() {
       {/* Results */}
       {result && (
         <div ref={resultsRef}>
-          <ResultsPanel result={result} />
+          <ResultsPanel result={result} inputText={inputText} />
         </div>
       )}
     </div>
