@@ -8,7 +8,7 @@ interface RadarChartProps {
   size?: number;
 }
 
-export default function RadarChart({ data, size = 320 }: RadarChartProps) {
+export default function RadarChart({ data, size = 280 }: RadarChartProps) {
   const cx = size / 2;
   const cy = size / 2;
   const radius = size * 0.35;
@@ -61,9 +61,7 @@ export default function RadarChart({ data, size = 320 }: RadarChartProps) {
   return (
     <svg
       viewBox={`0 0 ${size} ${size}`}
-      width={size}
-      height={size}
-      className="max-w-full h-auto"
+      className="max-w-full h-auto overflow-visible"
     >
       {/* Grid levels */}
       {Array.from({ length: levels }, (_, i) => {
@@ -117,20 +115,32 @@ export default function RadarChart({ data, size = 320 }: RadarChartProps) {
       ))}
 
       {/* Labels */}
-      {labels.map((lbl, i) => (
-        <text
-          key={`label-${i}`}
-          x={lbl.x}
-          y={lbl.y}
-          textAnchor={lbl.anchor}
-          dominantBaseline="central"
-          className="fill-muted"
-          fontSize={11}
-          fontFamily="var(--font-body), system-ui, sans-serif"
-        >
-          {lbl.label}
-        </text>
-      ))}
+      {labels.map((lbl, i) => {
+        const words = lbl.label.split(" ");
+        const multiline = words.length >= 2;
+        return (
+          <text
+            key={`label-${i}`}
+            x={lbl.x}
+            y={lbl.y}
+            textAnchor={lbl.anchor}
+            dominantBaseline="central"
+            className="fill-muted"
+            fontSize={11}
+            fontFamily="var(--font-body), system-ui, sans-serif"
+          >
+            {multiline ? (
+              words.map((word, wi) => (
+                <tspan key={wi} x={lbl.x} dy={wi === 0 ? "-0.5em" : "1.2em"}>
+                  {word}
+                </tspan>
+              ))
+            ) : (
+              lbl.label
+            )}
+          </text>
+        );
+      })}
     </svg>
   );
 }

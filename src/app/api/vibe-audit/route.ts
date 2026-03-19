@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { rateLimiter } from "@/lib/rate-limit";
+import { globalRateLimiter, checkUserLimit } from "@/lib/rate-limit";
 import { sanitizeInput } from "@/lib/sanitize";
 import { VIBE_AUDIT_SYSTEM_PROMPT, buildUserMessage } from "@/lib/prompt";
 import { vibeResultSchema } from "@/lib/schema";
@@ -11,16 +11,27 @@ const anthropic = new Anthropic({
 
 export async function POST(request: NextRequest) {
   try {
-    // ── Layer 2: Rate Limiting ──────────────────────────────
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-    const { success, remaining, reset } = await rateLimiter.limit(ip);
 
-    if (!success) {
+    // ── Global rate limit: 50/hour ──────────────────────────
+    const global = await globalRateLimiter.limit("global");
+    if (!global.success) {
       return NextResponse.json(
         {
-          error: "You've used all your vibe audits for now. Come back in a bit.",
+          error: "The vibe server is overloaded. Try again in a few minutes.",
           remaining: 0,
-          resetAt: reset,
+        },
+        { status: 429 }
+      );
+    }
+
+    // ── Per-user lifetime limit: 10 free ────────────────────
+    const user = await checkUserLimit(ip);
+    if (!user.success) {
+      return NextResponse.json(
+        {
+          error: "You've used all 10 free vibe audits. Want unlimited? Paid access coming soon.",
+          remaining: 0,
         },
         { status: 429 }
       );
@@ -80,8 +91,7 @@ export async function POST(request: NextRequest) {
     // ── Return validated, sanitized result ───────────────────
     return NextResponse.json({
       result: result.data,
-      remaining,
-      resetAt: reset,
+      remaining: user.remaining,
     });
   } catch (error) {
     console.error("Vibe audit error:", error);

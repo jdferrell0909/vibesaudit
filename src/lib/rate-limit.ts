@@ -1,9 +1,26 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-export const rateLimiter = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(5, "1 h"),  // 5 requests per IP per hour
+const redis = Redis.fromEnv();
+
+const USER_LIFETIME_LIMIT = 10;
+
+// Global cap: 50 requests per hour across all users
+export const globalRateLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(50, "1 h"),
   analytics: true,
-  prefix: "vibe-audit",
+  prefix: "vibe-audit-global",
 });
+
+// Per-user lifetime counter (10 free, then pay)
+export async function checkUserLimit(ip: string) {
+  const key = `vibe-audit-user:${ip}`;
+  const count = await redis.incr(key);
+
+  if (count > USER_LIFETIME_LIMIT) {
+    return { success: false, remaining: 0, used: count };
+  }
+
+  return { success: true, remaining: USER_LIFETIME_LIMIT - count, used: count };
+}

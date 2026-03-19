@@ -48,9 +48,8 @@ export default function ResultsPanel({ result }: ResultsPanelProps) {
         <p className="font-medium">{result.authorArchetype}</p>
       </div>
 
-      {/* Two-column layout: scores + radar chart */}
+      {/* Scores + Vibe Labels side by side */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Dimension Scores */}
         <div>
           <h3 className="text-xs uppercase tracking-wider text-muted mb-4 font-medium">
             Dimension scores
@@ -64,30 +63,35 @@ export default function ResultsPanel({ result }: ResultsPanelProps) {
               delay={i * 100}
             />
           ))}
-          <div className="mt-5 space-y-1.5">
+        </div>
+
+        <div>
+          <h3 className="text-xs uppercase tracking-wider text-muted mb-4 font-medium">
+            Vibe labels
+          </h3>
+          <div className="space-y-0">
             {DIMENSIONS.map((dim) => (
-              <div key={`label-${dim.key}`} className="flex items-baseline gap-2 text-sm">
-                <span className="text-muted">{dim.label}:</span>
-                <span className="font-bold" style={{ color: dim.color }}>
+              <div key={`label-${dim.key}`} className="h-[44px] flex items-start">
+                <span className="text-sm font-bold" style={{ color: dim.color }}>
                   {result[dim.labelKey]}
                 </span>
               </div>
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Radar Chart */}
-        <div>
-          <h3 className="text-xs uppercase tracking-wider text-muted mb-4 font-medium">
-            Vibe shape
-          </h3>
-          <div className="flex justify-center">
-            <RadarChart data={result} />
-          </div>
-          <p className="text-sm text-muted text-center mt-3">
-            Dominant dimension: <strong>{dominant.label}</strong> at {dominant.score}
-          </p>
+      {/* Radar Chart — full width */}
+      <div>
+        <h3 className="text-xs uppercase tracking-wider text-muted mb-4 font-medium">
+          Vibe shape
+        </h3>
+        <div className="flex justify-center overflow-visible px-20">
+          <RadarChart data={result} />
         </div>
+        <p className="text-sm text-muted text-center mt-3">
+          Dominant dimension: <strong>{dominant.label}</strong> at {dominant.score}
+        </p>
       </div>
     </div>
   );

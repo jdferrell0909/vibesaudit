@@ -131,12 +131,12 @@ export default function VibeAuditTool() {
       {/* Remaining audits / rate limit message */}
       {remaining !== null && remaining > 0 && (
         <p className="mt-2 text-xs text-muted">
-          {remaining} audit{remaining !== 1 ? "s" : ""} remaining this hour
+          {remaining} free audit{remaining !== 1 ? "s" : ""} remaining
         </p>
       )}
       {remaining === 0 && !loading && (
         <p className="mt-2 text-sm text-coral font-medium">
-          You&apos;ve used all your audits for now. Come back in a bit!
+          You&apos;ve used all 10 free audits. Paid access coming soon!
         </p>
       )}
 
