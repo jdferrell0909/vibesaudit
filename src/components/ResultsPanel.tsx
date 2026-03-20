@@ -27,8 +27,11 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
     const el = cardRef.current;
     if (!el) throw new Error("No card element");
     // Temporarily show the hidden share card for capture
-    el.style.position = "static";
-    el.style.left = "auto";
+    el.style.position = "fixed";
+    el.style.left = "0";
+    el.style.top = "0";
+    el.style.zIndex = "-1";
+    el.style.pointerEvents = "none";
     const canvas = await html2canvas(el, {
       backgroundColor: "#ffffff",
       scale: 2,
@@ -37,6 +40,9 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
     });
     el.style.position = "";
     el.style.left = "";
+    el.style.top = "";
+    el.style.zIndex = "";
+    el.style.pointerEvents = "";
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
@@ -141,6 +147,14 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
             <p className="mt-3 text-sm text-gray-500 italic leading-relaxed">
               &ldquo;{result.vibeSummary}&rdquo;
             </p>
+          </div>
+
+          {/* Author Archetype */}
+          <div>
+            <p className="text-xs uppercase tracking-wider text-gray-400 font-medium mb-1">
+              Who wrote this
+            </p>
+            <p className="text-sm font-medium text-gray-700">{result.authorArchetype}</p>
           </div>
 
           <hr className="border-gray-100" />
