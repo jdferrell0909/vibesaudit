@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import VibeAuditTool from "@/components/VibeAuditTool";
 import Footer from "@/components/Footer";
 
@@ -70,7 +71,9 @@ export default function Home() {
             Paste any text. Get its vibe forensically deconstructed.
           </p>
         </div>
-        <VibeAuditTool />
+        <Suspense>
+          <VibeAuditTool />
+        </Suspense>
 
         {/* How It Works */}
         <section className="mt-20 mb-16">
