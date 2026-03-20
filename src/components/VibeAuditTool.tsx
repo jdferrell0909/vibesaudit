@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import type { VibeResult } from "@/lib/types";
 import SampleTexts from "./SampleTexts";
 import ResultsPanel from "./ResultsPanel";
@@ -22,6 +23,8 @@ export default function VibeAuditTool() {
   const [remaining, setRemaining] = useState<number | null>(null);
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
+  const bypassToken = useMemo(() => searchParams.get("token"), [searchParams]);
 
   // Cycle loading messages
   useEffect(() => {
@@ -47,9 +50,12 @@ export default function VibeAuditTool() {
     setResult(null);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (bypassToken) headers["x-bypass-token"] = bypassToken;
+
       const response = await fetch("/api/vibe-audit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ text: inputText }),
       });
       const data = await response.json();
@@ -113,7 +119,7 @@ export default function VibeAuditTool() {
       <div className="flex items-center gap-3 mt-3">
         <button
           onClick={analyzeVibe}
-          disabled={!inputText.trim() || loading || remaining === 0}
+          disabled={!inputText.trim() || loading || (!bypassToken && remaining === 0)}
           className="px-6 py-2.5 rounded-lg bg-purple text-white font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-light transition-colors cursor-pointer min-w-[220px]"
         >
           {loading ? LOADING_MESSAGES[loadingMsgIndex] : "Audit the vibes"}

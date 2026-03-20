@@ -4,6 +4,11 @@ import { Redis } from "@upstash/redis";
 const redis = Redis.fromEnv();
 
 const USER_LIFETIME_LIMIT = 10;
+const BYPASS_TOKEN = process.env.BYPASS_TOKEN ?? "";
+
+export function isBypassToken(token: string | null): boolean {
+  return BYPASS_TOKEN.length > 0 && token === BYPASS_TOKEN;
+}
 
 // Global cap: 50 requests per hour across all users
 export const globalRateLimiter = new Ratelimit({
