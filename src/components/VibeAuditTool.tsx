@@ -93,7 +93,7 @@ export default function VibeAuditTool() {
   return (
     <div>
       {/* Textarea */}
-      <div className="relative">
+      <div>
         <textarea
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
@@ -104,7 +104,7 @@ export default function VibeAuditTool() {
           className="w-full p-4 rounded-xl border border-gray-200 resize-y text-base leading-relaxed placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple/40 focus:border-purple transition-shadow"
           disabled={loading}
         />
-        <span className="absolute bottom-3 right-3 text-xs text-muted tabular-nums">
+        <span className="text-xs text-muted tabular-nums block text-right mt-1">
           {charCount}/2000
         </span>
       </div>
