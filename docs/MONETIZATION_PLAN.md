@@ -1,911 +1,265 @@
-# Vibes Audit — Monetization Implementation Plan
+# Vibes Audit — Monetization & Feature Plan v2
 
-> Detailed technical plan for adding auth, payments, and feature gating to Vibes Audit.
-> Written for a tech lead audience. Covers architecture decisions, data models, file-level
-> implementation details, and phased rollout.
-
----
-
-## Table of Contents
-
-- [Current State](#current-state)
-- [Proposed Model](#proposed-model)
-- [Phase 1: Authentication (Supabase)](#phase-1-authentication-supabase)
-- [Phase 2: Database Schema (Supabase Postgres)](#phase-2-database-schema-supabase-postgres)
-- [Phase 3: Payments (Stripe Checkout)](#phase-3-payments-stripe-checkout)
-- [Phase 4: Feature Gating](#phase-4-feature-gating)
-- [API Route Changes](#api-route-changes)
-- [Client Component Changes](#client-component-changes)
-- [What Not to Build Yet](#what-not-to-build-yet)
-- [Cost Estimates](#cost-estimates)
-- [Risk & Open Questions](#risk--open-questions)
+**Date:** March 23, 2026
+**Status:** Planning — ready to build
 
 ---
 
-## Current State
+## The Strategy
 
-| Layer | Current Implementation |
-|-------|----------------------|
-| **Auth** | None. Users are anonymous, identified by IP address. |
-| **Database** | No persistent database. Upstash Redis stores ephemeral rate limit counters only. |
-| **Rate Limiting** | Global: 50 req/hour (Upstash sliding window). Per-user: 10 lifetime audits per IP (`redis.incr`). |
-| **Bypass** | Single shared `BYPASS_TOKEN` env var, passed via `?token=` query param. |
-| **Payments** | None. "Paid access coming soon" copy in the UI. |
-| **Data Persistence** | Zero. No audit history, no stored results. All results computed on-the-fly. |
-
-**Key files:**
-
-| File | Role |
-|------|------|
-| `src/app/api/vibe-audit/route.ts` | POST endpoint — rate limiting, Claude API call, Zod validation |
-| `src/lib/rate-limit.ts` | Upstash rate limiting (global + per-user IP counter) |
-| `src/lib/types.ts` | `VibeResult` interface, `DIMENSIONS` metadata |
-| `src/components/VibeAuditTool.tsx` | Main client component — form, state, API calls, loading states |
-| `src/components/ResultsPanel.tsx` | Results display — scores, radar chart, share/download |
-
-**Stack:** Next.js 16.2.0, React 19, TypeScript, Tailwind 4, Claude Sonnet 4 (Anthropic SDK), Upstash Redis, Vercel.
+Transform Vibes Audit from a single-mode novelty tool into a multi-mode writing analysis
+platform with a clean freemium model. Three audit modes create stickiness. Two payment
+options (audit pack + subscription) let users choose their comfort level.
 
 ---
 
-## Proposed Model
+## 1. New Audit Modes
 
-### Usage Cap + Subscription
+### Roast Mode (existing — keep as-is)
+The classic. Brutal, funny, no-holds-barred vibe analysis. This is the flagship and viral hook.
 
-**Free tier (no account required):**
+**Current dimensions:** Pretentiousness, Dad Energy, Chaos, Passive Aggression,
+Corporate Buzzwords, Unhinged Factor.
 
-- 8 lifetime audits (tracked by IP for anonymous users, by account if signed in)
-- Full results — no feature gating. Everyone sees the same output.
+### Life Coach Mode (new)
+**Tone:** Warm, constructive, slightly tough-love. "Here's what your writing says about
+where your head's at."
 
-**Pro tier — $4/mo:**
+**Use cases:** Journal entries, texts to an ex (before sending), personal statements,
+therapy homework, dating profiles.
 
-- Unlimited audits
-- Same full results (the paywall is quantity, not quality)
+**Dimensions (6):**
+1. Emotional Clarity (0–100) — How clearly are emotions expressed?
+2. Confidence Level (0–100) — Does this read as self-assured or uncertain?
+3. Authenticity (0–100) — Does this feel genuine or performative?
+4. Self-Awareness (0–100) — Is the author aware of how they come across?
+5. Growth Mindset (0–100) — Forward-looking vs. stuck in a rut?
+6. Boundaries (0–100) — Healthy boundaries or people-pleasing?
 
-### Why This Model
+### Professional Mode (new)
+**Tone:** Direct, constructive, corporate-savvy. "Here's how this lands in a
+professional context."
 
-1. **No feature gating.** The full result is the product — gating the radar chart or scores doesn't add enough perceived value to convert. The paywall is simply "you're out of free tries."
-2. **8 free audits** is enough to understand the product and share it, but not enough to use it as a regular tool without paying.
-3. **$4/mo is impulse-buy range.** Low enough to not think about it, high enough to cover Claude API costs with margin.
-4. **Subscription (not one-time)** allows for future feature expansion. Can always add a higher tier later.
+**Use cases:** Emails to boss, LinkedIn posts, cover letters, Slack messages,
+performance reviews.
+
+**Dimensions (6):**
+1. Clarity (0–100) — Is the message clear and well-structured?
+2. Professionalism (0–100) — Appropriate tone for workplace?
+3. Persuasiveness (0–100) — Does this move people to action?
+4. Conciseness (0–100) — Efficient use of words?
+5. Empathy (0–100) — Does the writer consider the reader's perspective?
+6. Authority (0–100) — Does this project competence and confidence?
 
 ---
 
-## Phase 1: Authentication (Supabase)
+## 2. Schema Restructuring
 
-### Why Supabase
+The current VibeResult has 6 hardcoded dimension fields (pretentiousness, dadEnergy, etc.).
+This needs to become a generic dimensions array so any mode can define its own 6 dimensions
+without schema changes.
 
-- Already on the Next.js / Vercel stack — first-class integration
-- Auth + Postgres in one service — no separate auth provider needed
-- Free tier covers this app's scale for a long time (50k monthly active users, 500MB database)
-- Row Level Security (RLS) means the client can query audit history directly without custom API routes
-
-### New Dependencies
-
-```bash
-npm install @supabase/supabase-js @supabase/ssr
-```
-
-### New Environment Variables
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-```
-
-### Supabase Project Setup
-
-1. Create project at [supabase.com](https://supabase.com)
-2. Enable **Email** provider (magic link — no passwords)
-3. Enable **Google** OAuth provider
-4. Set redirect URLs:
-   - Local: `http://localhost:3000/auth/callback`
-   - Production: `https://vibesaudit.com/auth/callback`
-
-### Auth Strategy
-
-- **Magic link (email) + Google OAuth** — covers 95% of users with minimal friction
-- **No username/password** — less liability, fewer support tickets
-- **Auth is optional** — free users can keep using the app without signing in (IP-based limits still work)
-- Signing in unlocks: paid plan access, usage tied to account instead of IP, audit history
-- Session stored in HTTP-only cookie via `@supabase/ssr`
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `src/lib/supabase/client.ts` | Browser-side Supabase client (uses `NEXT_PUBLIC_SUPABASE_ANON_KEY`) |
-| `src/lib/supabase/server.ts` | Server-side Supabase client (uses `SUPABASE_SERVICE_ROLE_KEY` for admin operations in API routes) |
-| `src/app/auth/callback/route.ts` | OAuth/magic link callback handler — exchanges code for session |
-| `src/components/AuthButton.tsx` | Sign in / Sign out button, renders in the header area of `page.tsx` |
-
-### `src/lib/supabase/client.ts`
+### New VibeResult type
 
 ```typescript
-import { createBrowserClient } from "@supabase/ssr";
+type AuditMode = "roast" | "life-coach" | "professional";
 
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+interface DimensionResult {
+  key: string;        // e.g. "pretentiousness", "clarity"
+  label: string;      // funny/insightful 3-6 word description
+  score: number;      // 0-100
+  color: string;      // hex color for UI
+}
+
+interface VibeResult {
+  mode: AuditMode;
+  overallVibe: string;        // 1-3 word label
+  vibeEmoji: string;          // single emoji
+  dimensions: DimensionResult[];  // exactly 6
+  vibeSummary: string;        // 2-sentence analysis (mode-appropriate tone)
+  authorArchetype: string;    // 5-15 word archetype
+  tags: string[];             // 3-5 tags
 }
 ```
 
-### `src/lib/supabase/server.ts`
-
-```typescript
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-export async function createClient() {
-  const cookieStore = await cookies();
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-}
-```
-
-### `src/app/auth/callback/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-
-export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
-
-  if (code) {
-    const supabase = await createClient();
-    await supabase.auth.exchangeCodeForSession(code);
-  }
-
-  return NextResponse.redirect(new URL(next, request.url));
-}
-```
-
-### `src/components/AuthButton.tsx`
-
-```typescript
-"use client";
-
-import { useState, useEffect } from "react";
-import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
-
-export default function AuthButton() {
-  const [user, setUser] = useState<User | null>(null);
-  const supabase = createClient();
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-  }, [supabase.auth]);
-
-  if (user) {
-    return (
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-muted">{user.email}</span>
-        <button
-          onClick={() => supabase.auth.signOut().then(() => setUser(null))}
-          className="text-sm text-muted hover:text-foreground transition-colors cursor-pointer"
-        >
-          Sign out
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      onClick={() =>
-        supabase.auth.signInWithOtp({
-          email: prompt("Enter your email") ?? "",
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-        })
-      }
-      className="text-sm font-medium text-purple hover:text-purple-light transition-colors cursor-pointer"
-    >
-      Sign in
-    </button>
-  );
-}
-```
-
-### Modified Files
-
-| File | Changes |
-|------|---------|
-| `src/app/page.tsx` | Add `<AuthButton />` to header area |
-| `src/app/api/vibe-audit/route.ts` | Read Supabase session to get `user_id` (see [API Route Changes](#api-route-changes)) |
+### Why this matters
+- ResultsPanel, RadarChart, and ScoreBar all read from the array instead of hardcoded fields
+- Adding future modes requires zero schema/component changes
+- Dimension colors come from the result data, not hardcoded in types.ts
 
 ---
 
-## Phase 2: Database Schema (Supabase Postgres)
+## 3. Pricing Model
 
-### Tables
+### Free Tier
+- 5 lifetime audits (across all modes)
+- All 3 modes available
+- Full results — no feature gating, no degraded experience
+- Share/download included
+- **Hard cutoff** when audits run out
 
-Run this in the Supabase SQL Editor:
+### Paid Option A: Audit Pack (one-time)
+- **10 audits for $5** ($0.50/audit)
+- No expiration, no subscription commitment
+- Targets the "I just want a few more" user
+- **This is the lowest-friction first purchase**
+
+### Paid Option B: Pro Subscription
+- **$4/month** for unlimited audits across all modes
+- Skip global rate limiting
+- Future: audit history, shareable report links
+- Targets power users and content creators
+
+### Paywall UX
+- Both options shown side-by-side when audits run out
+- Per-audit cost comparison: "$0.50/audit vs. unlimited for $4/mo"
+- Anchor the pack as "Most Popular" to reduce subscription anxiety
+- Sign-in required for any purchase (builds email list)
+
+### Conversion psychology
+- 5 free audits → user tries all 3 modes → runs out fast
+- Hard cutoff with clean paywall, no degraded experience
+- Pack purchase feels low-risk → after 2+ packs, subscription is obvious
+
+---
+
+## 4. Implementation Details
+
+### Prompt System Changes (src/lib/prompt.ts)
+
+One base system prompt with mode-specific instruction blocks:
+- Anti-injection guardrails stay consistent across all modes
+- Mode-specific sections define: personality, dimensions, output tone, scoring criteria
+- `buildUserMessage(text, mode)` includes mode in the request
+
+### API Changes (src/app/api/vibe-audit/route.ts)
+
+- Accept `mode` field in request body (default: "roast" for backward compat)
+- Validate mode is one of: "roast" | "life-coach" | "professional"
+- Pass mode to prompt builder
+- Rate limiting logic extended:
+  - Pro users: unlimited, bypass all limits
+  - Users with audit_credits > 0: decrement 1 credit, no rate limit
+  - Free users: 5 lifetime audits (tracked by user ID or IP in Redis)
+
+### Database Changes (Supabase profiles table)
 
 ```sql
--- ────────────────────────────────────────────────
--- profiles: tracks user plan and daily usage
--- ────────────────────────────────────────────────
-create table public.profiles (
-  id                     uuid primary key references auth.users(id) on delete cascade,
-  email                  text not null,
-  plan                   text not null default 'free',  -- 'free' | 'pro'
-  stripe_customer_id     text,
-  stripe_subscription_id text,
-  audits_today           integer not null default 0,
-  audits_today_reset_at  date not null default current_date,
-  created_at             timestamptz not null default now()
-);
-
--- ────────────────────────────────────────────────
--- audits: stores audit history for paid users
--- ────────────────────────────────────────────────
-create table public.audits (
-  id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null references public.profiles(id) on delete cascade,
-  input_text text not null,
-  result     jsonb not null,  -- full VibeResult object
-  created_at timestamptz not null default now()
-);
-
-create index audits_user_created on public.audits (user_id, created_at desc);
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS audit_credits INTEGER DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 ```
 
-### Row Level Security
+- `plan`: "free" | "pro" (already exists)
+- `audit_credits`: purchased one-time audits remaining
+- Stripe fields for managing subscriptions
 
-```sql
-alter table public.profiles enable row level security;
-alter table public.audits enable row level security;
+### UI Changes
 
--- Users can only read their own profile
-create policy "Users read own profile"
-  on public.profiles for select
-  using (auth.uid() = id);
+**Mode selector** (src/components/VibeAuditTool.tsx):
+- 3 tabs/segmented control above the textarea
+- Visual differentiation per mode:
+  - Roast: current purple/dark, flame icon
+  - Life Coach: warm green/teal, plant/growth icon
+  - Professional: clean blue/slate, briefcase icon
+- Sample texts change per mode
 
--- Users can only read their own audits
-create policy "Users read own audits"
-  on public.audits for select
-  using (auth.uid() = id);
-```
+**Results** (src/components/ResultsPanel.tsx):
+- Read dimensions from array, not hardcoded fields
+- Mode badge in results header
+- Colors from dimension data
 
-### Auto-Create Profile on Signup
+**RadarChart** (src/components/RadarChart.tsx):
+- Accept dynamic labels and colors from result data
+- No hardcoded dimension references
 
-Supabase trigger to create a `profiles` row when a new user signs up:
+**Paywall modal** (new component):
+- Shown when free audits exhausted
+- Two CTAs: "Buy 10 Audits — $5" and "Go Pro — $4/mo"
+- Sign-in prompt if not authenticated
+- After purchase: redirect back, auto-submit pending text
 
-```sql
-create or replace function public.handle_new_user()
-returns trigger as $$
-begin
-  insert into public.profiles (id, email)
-  values (new.id, new.email);
-  return new;
-end;
-$$ language plpgsql security definer;
+### Stripe Integration
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
-```
+**Products to create:**
+1. "Audit Pack" — one-time, $5
+2. "Vibes Audit Pro" — recurring, $4/month
 
-### Why Postgres Instead of Keeping Redis
+**New files:**
+- `src/app/api/stripe/checkout/route.ts` — creates Checkout Session
+- `src/app/api/stripe/webhook/route.ts` — handles events:
+  - `checkout.session.completed` → activate purchase (set plan or add credits)
+  - `customer.subscription.deleted` → downgrade to free
+  - `invoice.payment_failed` → handle failed renewal
 
-- **Subscriptions and audit history are persistent data.** Redis is for ephemeral counters.
-- **Supabase Postgres is free** up to 500MB — years of audits at this scale.
-- **RLS** means the client can query audit history directly — no custom API route needed.
-- **Redis stays** for the global rate limiter and anonymous user IP counters (those are still ephemeral).
+**Flow:**
+1. User clicks upgrade → POST /api/stripe/checkout
+2. Redirect to Stripe hosted checkout
+3. Payment completes → Stripe webhook fires
+4. Webhook updates profiles table
+5. User redirected back to app
 
 ---
 
-## Phase 3: Payments (Stripe Checkout)
+## 5. Build Order
 
-### Why Stripe Checkout (Not Embedded)
+### Phase 1: Mode System (~8 hours, no payments)
+1. Restructure VibeResult schema to dimensions array
+2. Write mode-specific prompt instructions
+3. Update API route to accept mode parameter
+4. Build mode selector UI
+5. Update ResultsPanel + RadarChart to be mode-agnostic
+6. Create per-mode sample texts
+7. Update Zod validation
+8. Test all three modes end-to-end
 
-- **Zero PCI compliance burden** — Stripe hosts the payment page entirely
-- Handles tax collection, receipts, failed payment retries, cancellation flows
-- Built-in customer portal for self-service subscription management
-- ~2 hours to implement vs. days for a custom embedded form
-- Stripe's hosted page converts better than custom forms (users trust it)
+### Phase 2: Payments (~6 hours)
+1. Set up Stripe account + products
+2. Build checkout route
+3. Build webhook endpoint
+4. Update Supabase schema (audit_credits, stripe fields)
+5. Update rate limiting for credits
+6. Build paywall modal
+7. Change free tier to 5 lifetime audits
+8. Test both purchase flows
 
-### New Dependency
-
-```bash
-npm install stripe
-```
-
-### New Environment Variables
-
-```env
-STRIPE_SECRET_KEY=sk_live_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-NEXT_PUBLIC_STRIPE_PRICE_ID_MONTHLY=price_...
-NEXT_PUBLIC_STRIPE_PRICE_ID_YEARLY=price_...
-```
-
-### Stripe Dashboard Setup
-
-1. Create product **"Vibes Audit Pro"**
-2. Add two prices:
-   - **Monthly:** $7/mo recurring
-   - **Yearly:** $49/yr recurring
-3. Create webhook endpoint: `https://vibesaudit.com/api/stripe/webhook`
-4. Subscribe to events:
-   - `checkout.session.completed`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-5. Enable **Customer Portal** (Settings → Billing → Customer Portal)
-
-### New Files
-
-| File | Purpose |
-|------|---------|
-| `src/app/api/stripe/checkout/route.ts` | Creates a Stripe Checkout Session, returns URL for redirect |
-| `src/app/api/stripe/webhook/route.ts` | Receives Stripe webhook events, updates `profiles` table |
-| `src/components/UpgradeButton.tsx` | "Go Pro" CTA, triggers checkout flow |
-
-### `src/app/api/stripe/checkout/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { createClient } from "@/lib/supabase/server";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-export async function POST(request: NextRequest) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Must be signed in" }, { status: 401 });
-  }
-
-  const { priceId } = await request.json();
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    payment_method_types: ["card"],
-    line_items: [{ price: priceId, quantity: 1 }],
-    customer_email: user.email,
-    metadata: { user_id: user.id },
-    success_url: `${request.nextUrl.origin}/?upgraded=true`,
-    cancel_url: `${request.nextUrl.origin}/`,
-  });
-
-  return NextResponse.json({ url: session.url });
-}
-```
-
-### `src/app/api/stripe/webhook/route.ts`
-
-```typescript
-import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
-import { createClient } from "@supabase/supabase-js";
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-
-// Use service role client — webhooks run without user context
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-export async function POST(request: NextRequest) {
-  const body = await request.text();
-  const sig = request.headers.get("stripe-signature")!;
-
-  let event: Stripe.Event;
-  try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
-  } catch {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-  }
-
-  switch (event.type) {
-    case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.metadata?.user_id;
-      if (!userId) break;
-
-      await supabase
-        .from("profiles")
-        .update({
-          plan: "pro",
-          stripe_customer_id: session.customer as string,
-          stripe_subscription_id: session.subscription as string,
-        })
-        .eq("id", userId);
-      break;
-    }
-
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object as Stripe.Subscription;
-      await supabase
-        .from("profiles")
-        .update({ plan: "free", stripe_subscription_id: null })
-        .eq("stripe_customer_id", subscription.customer as string);
-      break;
-    }
-
-    case "customer.subscription.updated": {
-      const subscription = event.data.object as Stripe.Subscription;
-      const plan = subscription.status === "active" ? "pro" : "free";
-      await supabase
-        .from("profiles")
-        .update({ plan })
-        .eq("stripe_customer_id", subscription.customer as string);
-      break;
-    }
-  }
-
-  return NextResponse.json({ received: true });
-}
-```
-
-### Checkout Flow (Sequence)
-
-```
-User clicks "Go Pro"
-  → AuthButton checks: signed in?
-    → No: prompt sign-in first, then redirect back
-    → Yes: continue
-  → POST /api/stripe/checkout { priceId }
-  → Server creates Stripe Checkout Session with user_id in metadata
-  → Returns session URL
-  → Client redirects to Stripe hosted checkout
-  → User completes payment on Stripe
-  → Stripe redirects to /?upgraded=true
-  → Stripe fires webhook → POST /api/stripe/webhook
-  → Webhook updates profiles.plan = 'pro'
-  → Next page load reads updated plan from profiles
-```
-
-### `src/components/UpgradeButton.tsx`
-
-```typescript
-"use client";
-
-import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-
-export default function UpgradeButton() {
-  const [loading, setLoading] = useState(false);
-
-  const handleUpgrade = async (priceId: string) => {
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      // Trigger sign-in flow first
-      await supabase.auth.signInWithOtp({
-        email: prompt("Enter your email to sign up") ?? "",
-        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-      });
-      return;
-    }
-
-    setLoading(true);
-    const res = await fetch("/api/stripe/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceId }),
-    });
-    const { url } = await res.json();
-    window.location.href = url;
-  };
-
-  return (
-    <div className="flex flex-col items-center gap-3 p-6 rounded-2xl bg-gray-50 border border-gray-100">
-      <p className="font-heading text-lg font-bold">Unlock full vibe analysis</p>
-      <p className="text-sm text-muted text-center max-w-sm">
-        Get detailed dimension scores, radar chart, shareable results card, and unlimited audits.
-      </p>
-      <div className="flex gap-3 mt-2">
-        <button
-          onClick={() => handleUpgrade(process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_MONTHLY!)}
-          disabled={loading}
-          className="px-5 py-2 rounded-lg bg-purple text-white text-sm font-medium hover:bg-purple-light transition-colors disabled:opacity-50 cursor-pointer"
-        >
-          $7/month
-        </button>
-        <button
-          onClick={() => handleUpgrade(process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_YEARLY!)}
-          disabled={loading}
-          className="px-5 py-2 rounded-lg border-2 border-purple text-purple text-sm font-medium hover:bg-purple/5 transition-colors disabled:opacity-50 cursor-pointer"
-        >
-          $49/year (save 42%)
-        </button>
-      </div>
-    </div>
-  );
-}
-```
+### Phase 3: Polish (~3 hours)
+1. Update landing page copy + FAQ
+2. Add "Pro" badge + remaining audits counter
+3. Basic conversion tracking
+4. Monitor and adjust
 
 ---
 
-## Phase 4: Feature Gating
+## 6. Cost Analysis
 
-### Free vs. Pro Feature Matrix
+### Per-Audit API Cost
+- Claude Sonnet: ~$0.003–0.01 per audit
+- Audit pack ($5 for 10): $0.50/audit → ~98% gross margin
+- Pro sub ($4/mo): breaks even at ~400 audits/month (nobody does this)
 
-| Feature | Free | Pro |
-|---------|------|-----|
-| Overall vibe + emoji | Yes | Yes |
-| Tags | Yes | Yes |
-| Vibe summary | Yes | Yes |
-| Individual dimension scores | Blurred / locked | Yes |
-| Dimension labels (the funny ones) | Hidden | Yes |
-| Radar chart | Hidden | Yes |
-| Author archetype | Hidden | Yes |
-| Share / download image | Hidden | Yes |
-| Audit history | No | Last 50 |
-| Daily limit | 5/day | Unlimited |
+### Infrastructure
+- Vercel: free tier for low traffic
+- Supabase: free tier (50k MAU, 500MB)
+- Upstash Redis: free tier (10k commands/day)
+- Stripe fees: 2.9% + $0.30/transaction
+  - On $5 pack: Stripe gets $0.45, you get $4.55
+  - On $4/mo sub: Stripe gets $0.42, you get $3.58
 
-### Design Principle
-
-The free result must feel complete enough to share by word-of-mouth. The overall vibe ("Corporate Dad Energy 🎩") + summary + tags is the viral hook. The detailed breakdown is the "I want more" pull toward upgrading.
+### Break-even: 1 paying customer = profitable
 
 ---
 
-## API Route Changes
+## 7. Future Opportunities (post-launch)
 
-### Modified: `src/app/api/vibe-audit/route.ts`
-
-The route currently handles three concerns: bypass check, rate limiting, and Claude API call. The new version adds plan-aware logic:
-
-```typescript
-import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-import { globalRateLimiter, checkUserLimit, isBypassToken } from "@/lib/rate-limit";
-import { sanitizeInput } from "@/lib/sanitize";
-import { VIBE_AUDIT_SYSTEM_PROMPT, buildUserMessage } from "@/lib/prompt";
-import { vibeResultSchema } from "@/lib/schema";
-import { createClient } from "@/lib/supabase/server";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-export async function POST(request: NextRequest) {
-  try {
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-    const bypass = isBypassToken(request.headers.get("x-bypass-token"));
-
-    // ── Identify user ─────────────────────────────────
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    let plan: "free" | "pro" = "free";
-    let profile = null;
-
-    if (user) {
-      const { data } = await supabase
-        .from("profiles")
-        .select("plan, audits_today, audits_today_reset_at")
-        .eq("id", user.id)
-        .single();
-      profile = data;
-      plan = (data?.plan as "free" | "pro") ?? "free";
-    }
-
-    // ── Rate limiting ─────────────────────────────────
-    if (!bypass && plan !== "pro") {
-      // Global rate limit: 50/hour
-      const global = await globalRateLimiter.limit("global");
-      if (!global.success) {
-        return NextResponse.json(
-          { error: "The vibe server is overloaded. Try again in a few minutes.", remaining: 0 },
-          { status: 429 }
-        );
-      }
-
-      if (user && profile) {
-        // Signed-in free user: 5/day tracked in Postgres
-        const today = new Date().toISOString().split("T")[0];
-        const count = profile.audits_today_reset_at === today ? profile.audits_today : 0;
-
-        if (count >= 5) {
-          return NextResponse.json(
-            { error: "You've used all 5 free audits for today. Upgrade for unlimited.", remaining: 0, plan: "free" },
-            { status: 429 }
-          );
-        }
-
-        // Increment (or reset if new day)
-        await supabase
-          .from("profiles")
-          .update({
-            audits_today: count + 1,
-            audits_today_reset_at: today,
-          })
-          .eq("id", user.id);
-      } else {
-        // Anonymous: IP-based Redis limit (5/day instead of 10 lifetime)
-        const userLimit = await checkUserLimit(ip);
-        if (!userLimit.success) {
-          return NextResponse.json(
-            { error: "You've used all 5 free audits for today. Sign in for more.", remaining: 0 },
-            { status: 429 }
-          );
-        }
-      }
-    }
-
-    // ── Input sanitization ────────────────────────────
-    const body = await request.json().catch(() => null);
-    if (!body || typeof body.text !== "string") {
-      return NextResponse.json({ error: "Missing 'text' field." }, { status: 400 });
-    }
-    const sanitized = sanitizeInput(body.text);
-    if ("error" in sanitized) {
-      return NextResponse.json({ error: sanitized.error }, { status: 400 });
-    }
-
-    // ── Claude API call ───────────────────────────────
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: VIBE_AUDIT_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildUserMessage(sanitized.text) }],
-    });
-
-    const rawText = message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
-
-    // ── Parse & validate ──────────────────────────────
-    let parsed: unknown;
-    try {
-      const cleaned = rawText.replace(/```json|```/g, "").trim();
-      parsed = JSON.parse(cleaned);
-    } catch {
-      return NextResponse.json({ error: "Vibe analysis returned unexpected format." }, { status: 502 });
-    }
-
-    const result = vibeResultSchema.safeParse(parsed);
-    if (!result.success) {
-      return NextResponse.json({ error: "Vibe analysis returned invalid data." }, { status: 502 });
-    }
-
-    // ── Save audit history (pro users only) ───────────
-    if (user && plan === "pro") {
-      await supabase.from("audits").insert({
-        user_id: user.id,
-        input_text: sanitized.text,
-        result: result.data,
-      });
-    }
-
-    // ── Return result with plan info ──────────────────
-    return NextResponse.json({
-      result: result.data,
-      plan,
-      remaining: plan === "pro" ? null : (user && profile)
-        ? Math.max(0, 5 - (profile.audits_today + 1))
-        : null,
-    });
-  } catch (error) {
-    console.error("Vibe audit error:", error);
-    return NextResponse.json({ error: "Something went wrong." }, { status: 500 });
-  }
-}
-```
-
-### Modified: `src/lib/rate-limit.ts`
-
-Change the per-user limit from 10 lifetime to 5/day with daily reset:
-
-```typescript
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
-
-const redis = Redis.fromEnv();
-
-const USER_DAILY_LIMIT = 5;
-const BYPASS_TOKEN = process.env.BYPASS_TOKEN ?? "";
-
-export function isBypassToken(token: string | null): boolean {
-  return BYPASS_TOKEN.length > 0 && token === BYPASS_TOKEN;
-}
-
-// Global cap: 50 requests per hour across all users
-export const globalRateLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(50, "1 h"),
-  analytics: true,
-  prefix: "vibe-audit-global",
-});
-
-// Anonymous per-IP daily limit (5/day, resets via TTL)
-export async function checkUserLimit(ip: string) {
-  const today = new Date().toISOString().split("T")[0];
-  const key = `vibe-audit-user:${ip}:${today}`;
-  const count = await redis.incr(key);
-
-  // Set TTL on first use (expires end of day + buffer)
-  if (count === 1) {
-    await redis.expire(key, 86400);
-  }
-
-  if (count > USER_DAILY_LIMIT) {
-    return { success: false, remaining: 0, used: count };
-  }
-
-  return { success: true, remaining: USER_DAILY_LIMIT - count, used: count };
-}
-```
+- API tier ($19/mo) for developers integrating vibe-checking
+- Chrome extension: vibe-check emails/Slack before sending
+- Shareable report URLs (drives organic traffic)
+- Custom dimensions for pro users
+- Team plans for content teams
+- Audit history + trend tracking
 
 ---
 
-## Client Component Changes
-
-### Modified: `src/components/ResultsPanel.tsx`
-
-Accept a `plan` prop and conditionally render features:
-
-```typescript
-interface ResultsPanelProps {
-  result: VibeResult;
-  inputText: string;
-  plan: "free" | "pro";
-}
-
-export default function ResultsPanel({ result, inputText, plan }: ResultsPanelProps) {
-  // ... existing code ...
-
-  return (
-    <div className="animate-fade-in-up mt-8 space-y-6">
-      {/* Verdict Card — always visible */}
-      <div className="text-center p-6 rounded-2xl bg-gray-50 border border-gray-100">
-        <div className="text-5xl mb-3">{result.vibeEmoji}</div>
-        <h2 className="font-heading text-2xl font-bold tracking-tight">{result.overallVibe}</h2>
-        <div className="flex flex-wrap justify-center gap-2 mt-3">
-          {result.tags.map((tag) => (
-            <span key={tag} className="px-2.5 py-0.5 text-xs rounded-full bg-purple/10 text-purple font-medium">
-              {tag}
-            </span>
-          ))}
-        </div>
-        <p className="mt-4 text-muted italic max-w-lg mx-auto leading-relaxed">
-          &ldquo;{result.vibeSummary}&rdquo;
-        </p>
-      </div>
-
-      {plan === "pro" ? (
-        <>
-          {/* Author Archetype — pro only */}
-          {/* Score breakdown — pro only */}
-          {/* Radar chart — pro only */}
-          {/* Share bar — pro only */}
-        </>
-      ) : (
-        <UpgradeButton />
-      )}
-    </div>
-  );
-}
-```
-
-### Modified: `src/components/VibeAuditTool.tsx`
-
-- Track `plan` in state alongside `result` and `remaining`
-- Pass `plan` to `ResultsPanel`
-- Update the "audits remaining" copy to reference daily limit
-- Show sign-in prompt when anonymous user hits limit
-
-```typescript
-// In the API response handler:
-setResult(data.result);
-setRemaining(data.remaining);
-setPlan(data.plan ?? "free");
-
-// In the JSX:
-{result && (
-  <div ref={resultsRef}>
-    <ResultsPanel result={result} inputText={inputText} plan={plan} />
-  </div>
-)}
-```
-
-### New: Audit History Page (Optional, Pro Only)
-
-| File | Purpose |
-|------|---------|
-| `src/app/history/page.tsx` | Server component — fetches last 50 audits via Supabase client-side query (RLS handles auth) |
-
-This is a simple list page: date, input text preview, overall vibe. Clicking an entry shows the full result. Can be deferred to post-launch.
-
----
-
-## What Not to Build Yet
-
-| Feature | Why Not Now |
-|---------|------------|
-| Team plans | Wait until someone asks — zero signal this is needed |
-| API access | Same — no demand signal yet |
-| Custom Stripe portal | Use Stripe's hosted customer portal (one line of config) |
-| Email drip campaigns | Overkill at this scale |
-| Usage analytics dashboard | Vercel Analytics + Stripe Dashboard covers it |
-| Refund handling | Stripe handles this in their dashboard |
-| Annual billing toggle UI | Just show both price buttons side by side |
-| Audit comparison / history charts | Feature creep — ship history as a simple list first |
-
----
-
-## Cost Estimates
-
-| Item | Monthly Cost |
-|------|-------------|
-| Claude API (~$0.003/audit × 1,000 audits) | ~$3 |
-| Supabase (free tier: 50k MAU, 500MB DB) | $0 |
-| Upstash Redis (free tier: 10k commands/day) | $0 |
-| Vercel (hobby or pro) | $0–$20 |
-| Stripe (2.9% + $0.30 per transaction) | Variable |
-| **Break-even point** | **~2 paying users/month** |
-
-At 100 paying users ($7/mo): $700/mo revenue, ~$50/mo costs = **$650/mo profit**.
-
----
-
-## Risk & Open Questions
-
-### IP-Based Limits Are Imperfect
-
-Users behind corporate VPNs or shared networks may share a limit. This is acceptable for the free tier — it's a speed bump, not a wall. Signed-in users get their own counter.
-
-### Daily Limit Reset Timing
-
-The current plan resets at UTC midnight. Should it reset 24 hours from first use instead? UTC midnight is simpler and predictable. Recommend starting with UTC midnight.
-
-### Global Rate Limit (50/hour)
-
-This is currently very conservative. Once paying users exist, this needs to increase or be removed for pro users (the plan above already skips rate limiting for pro). Monitor and adjust.
-
-### Claude API Cost at Scale
-
-At $0.003/audit, costs stay low. But if the app goes viral and free tier usage spikes, costs could grow before revenue catches up. Mitigations:
-- The 5/day free cap limits exposure
-- Global rate limit provides a hard ceiling
-- Can reduce to 3/day free if needed
-
-### Webhook Reliability
-
-Stripe webhooks can fail or be delayed. The app should handle this gracefully:
-- User's plan update may lag by a few seconds after checkout
-- Consider polling the profile on the client after redirect from Stripe (`/?upgraded=true` triggers a profile refresh)
-
-### Migration Path for Existing Users
-
-Current users have lifetime counters in Redis. When switching to daily limits:
-- No migration needed — just deploy the new `checkUserLimit` with daily keys
-- Old lifetime keys in Redis will naturally expire or become irrelevant
-- Users who were previously locked out get a fresh start
-
----
-
-## Implementation Order
-
-| Phase | Effort Estimate | Depends On |
-|-------|----------------|------------|
-| 1. Auth (Supabase) | ~4 hours | Supabase project created |
-| 2. Database schema + RLS | ~1 hour | Phase 1 |
-| 3. Stripe integration | ~4 hours | Stripe account, Phase 1 + 2 |
-| 4. Feature gating (UI) | ~3 hours | Phase 1 + 2 + 3 |
-| **Total** | **~12 hours** | |
-
-Phases are sequential — each builds on the previous. No architectural risks, no novel patterns. All integrations have well-documented SDKs and examples.
+*Priority: get to first dollar as fast as possible. Phase 1 makes the product worth paying
+for. Phase 2 lets people pay. Phase 3 maximizes conversion. Total estimated effort: ~17 hours.*

@@ -17,7 +17,7 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Vibes Audit — AI-Powered Vibe Analysis",
   description:
-    "Paste any text. Get its vibe forensically deconstructed. Pretentiousness, chaos, dad energy, and more — all scored by AI.",
+    "Paste any text. Get its vibe forensically deconstructed in three modes — Roast, Life Coach, and Professional — all scored by AI.",
   metadataBase: new URL("https://vibesaudit.com"),
   openGraph: {
     title: "Vibes Audit",

@@ -1,32 +1,22 @@
 "use client";
 
-import { DIMENSIONS } from "@/lib/types";
-import type { VibeResult } from "@/lib/types";
+import type { DimensionResult } from "@/lib/types";
 
 interface RadarChartProps {
-  data: VibeResult;
+  dimensions: DimensionResult[];
   size?: number;
 }
 
-export default function RadarChart({ data, size = 280 }: RadarChartProps) {
+export default function RadarChart({ dimensions, size = 280 }: RadarChartProps) {
   const cx = size / 2;
   const cy = size / 2;
   const radius = size * 0.35;
   const levels = 5;
   const labelOffset = 24;
+  const count = dimensions.length;
 
-  const scores = [
-    data.pretentiousness,
-    data.dadEnergy,
-    data.chaos,
-    data.passiveAggression,
-    data.corporateBuzzwords,
-    data.unhingedFactor,
-  ];
-
-  // Calculate point position for a given axis index and value (0-100)
   const getPoint = (index: number, value: number) => {
-    const angle = (Math.PI * 2 * index) / 6 - Math.PI / 2;
+    const angle = (Math.PI * 2 * index) / count - Math.PI / 2;
     const r = (value / 100) * radius;
     return {
       x: cx + r * Math.cos(angle),
@@ -34,26 +24,29 @@ export default function RadarChart({ data, size = 280 }: RadarChartProps) {
     };
   };
 
-  // Build polygon points string for a given value
   const getPolygonPoints = (value: number) => {
-    return Array.from({ length: 6 }, (_, i) => {
+    return Array.from({ length: count }, (_, i) => {
       const pt = getPoint(i, value);
       return `${pt.x},${pt.y}`;
     }).join(" ");
   };
 
-  // Data polygon points
-  const dataPoints = scores.map((score, i) => getPoint(i, score));
+  const dataPoints = dimensions.map((dim, i) => getPoint(i, dim.score));
   const dataPolygon = dataPoints.map((pt) => `${pt.x},${pt.y}`).join(" ");
 
-  // Label positions (outside the chart)
-  const labels = DIMENSIONS.map((dim, i) => {
-    const angle = (Math.PI * 2 * i) / 6 - Math.PI / 2;
+  // Use the first dimension's color for the fill, or a neutral default
+  const fillColor = dimensions[0]?.color ?? "#534AB7";
+
+  const labels = dimensions.map((dim, i) => {
+    const angle = (Math.PI * 2 * i) / count - Math.PI / 2;
     const r = radius + labelOffset;
     return {
       x: cx + r * Math.cos(angle),
       y: cy + r * Math.sin(angle),
-      label: dim.label,
+      label: dim.key
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, (s) => s.toUpperCase())
+        .trim(),
       anchor: getTextAnchor(angle),
     };
   });
@@ -78,7 +71,7 @@ export default function RadarChart({ data, size = 280 }: RadarChartProps) {
       })}
 
       {/* Axis lines */}
-      {Array.from({ length: 6 }, (_, i) => {
+      {Array.from({ length: count }, (_, i) => {
         const pt = getPoint(i, 100);
         return (
           <line
@@ -96,8 +89,8 @@ export default function RadarChart({ data, size = 280 }: RadarChartProps) {
       {/* Data polygon */}
       <polygon
         points={dataPolygon}
-        fill="rgba(83, 74, 183, 0.15)"
-        stroke="#534AB7"
+        fill={`${fillColor}26`}
+        stroke={fillColor}
         strokeWidth={2}
       />
 
@@ -108,7 +101,7 @@ export default function RadarChart({ data, size = 280 }: RadarChartProps) {
           cx={pt.x}
           cy={pt.y}
           r={4}
-          fill={DIMENSIONS[i].color}
+          fill={dimensions[i].color}
           stroke="white"
           strokeWidth={1.5}
         />

@@ -9,7 +9,7 @@ const jsonLd = {
   name: "Vibes Audit",
   url: "https://vibesaudit.com",
   description:
-    "AI-powered tone and vibe analyzer. Paste any text and get its vibe forensically deconstructed — pretentiousness, chaos, dad energy, and more.",
+    "AI-powered tone and vibe analyzer. Paste any text and get its vibe forensically deconstructed in three modes — Roast, Life Coach, and Professional.",
   applicationCategory: "UtilityApplication",
   operatingSystem: "Any",
   offers: {
@@ -22,19 +22,23 @@ const jsonLd = {
 const faqs = [
   {
     q: "What is a vibe audit?",
-    a: "A vibe audit analyzes the tone, energy, and personality of any piece of writing. Instead of generic sentiment analysis, it scores your text across six dimensions — pretentiousness, dad energy, chaos, passive aggression, corporate buzzwords, and unhinged factor — to give you a full picture of how your writing actually comes across.",
+    a: "A vibe audit analyzes the tone, energy, and personality of any piece of writing. Choose from three modes — Roast for brutally honest humor, Life Coach for warm personal insights, or Professional for workplace tone analysis — and get your text scored across six tailored dimensions.",
   },
   {
     q: "How does the writing tone checker work?",
-    a: "Paste any text — an email draft, a tweet, a Slack message, a cover letter — and our AI reads it the way a human would. It picks up on subtle cues like word choice, sentence structure, and rhetorical patterns to score your writing across six vibe dimensions and give you a plain-English summary of the overall tone.",
+    a: "Paste any text — an email draft, a tweet, a Slack message, a journal entry — and pick an audit mode. Our AI reads it the way a human would, scoring your writing across six dimensions specific to that mode and giving you a plain-English summary of the overall tone.",
+  },
+  {
+    q: "What are the three audit modes?",
+    a: "Roast mode gives you a brutally funny vibe check across dimensions like chaos, dad energy, and pretentiousness. Life Coach mode offers warm, constructive feedback on emotional clarity, confidence, and authenticity. Professional mode evaluates workplace communication for clarity, persuasiveness, and authority.",
   },
   {
     q: "Can I check the tone of my email before sending it?",
-    a: "Absolutely. Paste your email draft and get an instant read on how it sounds. You'll see whether it comes across as passive-aggressive, overly corporate, or exactly the right amount of casual. It's like having a brutally honest friend read your email before you hit send.",
+    a: "Absolutely. Paste your email draft, pick Professional mode, and get an instant read on how it sounds — clarity, professionalism, authority, and more. Or use Roast mode if you want the unfiltered truth.",
   },
   {
     q: "Is Vibes Audit free?",
-    a: "Every user gets 8 free vibe audits — no signup required. After that, unlimited audits are available for $4/month.",
+    a: "Every user gets 8 free vibe audits across all modes — no signup required. After that, unlimited audits are available for $4/month.",
   },
 ];
 
@@ -102,8 +106,8 @@ export default function Home() {
                 AI analyzes the vibe
               </h3>
               <p className="text-sm text-muted">
-                Our tone analyzer reads your text like a human and scores it
-                across six vibe dimensions.
+                Pick a mode — Roast, Life Coach, or Professional — and our AI
+                scores your text across six tailored dimensions.
               </p>
             </div>
             <div>

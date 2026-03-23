@@ -3,7 +3,6 @@
 import { useRef, useState, useCallback } from "react";
 import html2canvas from "html2canvas-pro";
 import type { VibeResult } from "@/lib/types";
-import { DIMENSIONS } from "@/lib/types";
 import ScoreBar from "./ScoreBar";
 import RadarChart from "./RadarChart";
 
@@ -17,16 +16,11 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const scores = DIMENSIONS.map((dim) => ({
-    label: dim.label,
-    score: result[dim.key] as number,
-  }));
-  const dominant = scores.reduce((max, s) => (s.score > max.score ? s : max), scores[0]);
+  const dominant = result.dimensions.reduce((max, d) => (d.score > max.score ? d : max), result.dimensions[0]);
 
   const captureCard = useCallback(async (): Promise<Blob> => {
     const el = cardRef.current;
     if (!el) throw new Error("No card element");
-    // Temporarily show the hidden share card for capture
     el.style.position = "fixed";
     el.style.left = "0";
     el.style.top = "0";
@@ -108,6 +102,10 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
     setTimeout(() => setCopied(false), 2000);
   }, []);
 
+  // Derive a human-readable dimension name from the camelCase key
+  const dimensionName = (key: string) =>
+    key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()).trim();
+
   return (
     <div className="animate-fade-in-up mt-8 space-y-6">
       {/* Hidden share card — only rendered for image capture */}
@@ -161,11 +159,10 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
 
           {/* Vibe labels with score rings */}
           <div className="grid grid-cols-3 gap-4">
-            {DIMENSIONS.map((dim) => {
-              const score = result[dim.key] as number;
+            {result.dimensions.map((dim) => {
               const r = 22;
               const circ = 2 * Math.PI * r;
-              const filled = (score / 100) * circ;
+              const filled = (dim.score / 100) * circ;
               return (
                 <div key={dim.key} className="flex flex-col items-center text-center">
                   <svg width="54" height="54" viewBox="0 0 54 54">
@@ -187,12 +184,12 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
                       fontWeight="700"
                       fill={dim.color}
                     >
-                      {score}
+                      {dim.score}
                     </text>
                   </svg>
-                  <span className="text-xs text-gray-500 mt-1 font-medium">{dim.label}</span>
+                  <span className="text-xs text-gray-500 mt-1 font-medium">{dimensionName(dim.key)}</span>
                   <span className="text-xs font-bold mt-0.5" style={{ color: dim.color }}>
-                    {result[dim.labelKey]}
+                    {dim.label}
                   </span>
                 </div>
               );
@@ -239,11 +236,10 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
 
         {/* Score rings — mobile only */}
         <div className="grid grid-cols-3 gap-6 max-w-[480px] mx-auto md:hidden">
-          {DIMENSIONS.map((dim) => {
-            const score = result[dim.key] as number;
+          {result.dimensions.map((dim) => {
             const r = 26;
             const circ = 2 * Math.PI * r;
-            const filled = (score / 100) * circ;
+            const filled = (dim.score / 100) * circ;
             return (
               <div key={dim.key} className="flex flex-col items-center text-center">
                 <svg width="64" height="64" viewBox="0 0 64 64">
@@ -265,12 +261,12 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
                     fontWeight="700"
                     fill={dim.color}
                   >
-                    {score}
+                    {dim.score}
                   </text>
                 </svg>
-                <span className="text-xs text-muted mt-1 font-medium">{dim.label}</span>
+                <span className="text-xs text-muted mt-1 font-medium">{dimensionName(dim.key)}</span>
                 <span className="text-xs font-bold mt-0.5" style={{ color: dim.color }}>
-                  {result[dim.labelKey]}
+                  {dim.label}
                 </span>
               </div>
             );
@@ -283,11 +279,11 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
             <h3 className="text-xs uppercase tracking-wider text-muted mb-4 font-medium">
               Dimension scores
             </h3>
-            {DIMENSIONS.map((dim, i) => (
+            {result.dimensions.map((dim, i) => (
               <ScoreBar
                 key={dim.key}
-                label={dim.label}
-                score={result[dim.key] as number}
+                label={dimensionName(dim.key)}
+                score={dim.score}
                 color={dim.color}
                 delay={i * 100}
               />
@@ -298,10 +294,10 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
               Vibe labels
             </h3>
             <div className="space-y-0">
-              {DIMENSIONS.map((dim) => (
+              {result.dimensions.map((dim) => (
                 <div key={`label-${dim.key}`} className="h-[44px] flex items-start">
                   <span className="text-sm font-bold" style={{ color: dim.color }}>
-                    {result[dim.labelKey]}
+                    {dim.label}
                   </span>
                 </div>
               ))}
@@ -316,10 +312,10 @@ export default function ResultsPanel({ result, inputText }: ResultsPanelProps) {
           Vibe shape
         </h3>
         <div className="flex justify-center overflow-visible px-20">
-          <RadarChart data={result} />
+          <RadarChart dimensions={result.dimensions} />
         </div>
         <p className="text-sm text-muted text-center mt-3">
-          Dominant dimension: <strong>{dominant.label}</strong> at {dominant.score}
+          Dominant dimension: <strong>{dimensionName(dominant.key)}</strong> at {dominant.score}
         </p>
       </div>
 

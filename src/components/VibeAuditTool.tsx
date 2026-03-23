@@ -2,21 +2,41 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import type { VibeResult } from "@/lib/types";
+import type { VibeResult, AuditMode } from "@/lib/types";
+import { AUDIT_MODES } from "@/lib/types";
 import SampleTexts from "./SampleTexts";
 import ResultsPanel from "./ResultsPanel";
 
-const LOADING_MESSAGES = [
-  "Calibrating vibe sensors...",
-  "Measuring dad energy wavelength...",
-  "Consulting the chaos oracle...",
-  "Running passive aggression spectrometry...",
-  "Detecting unhinged frequencies...",
-  "Computing final vibe verdict...",
-];
+const LOADING_MESSAGES: Record<AuditMode, string[]> = {
+  roast: [
+    "Calibrating vibe sensors...",
+    "Measuring dad energy wavelength...",
+    "Consulting the chaos oracle...",
+    "Running passive aggression spectrometry...",
+    "Detecting unhinged frequencies...",
+    "Computing final vibe verdict...",
+  ],
+  "life-coach": [
+    "Reading between the lines...",
+    "Measuring emotional clarity...",
+    "Checking authenticity levels...",
+    "Sensing growth potential...",
+    "Evaluating boundary health...",
+    "Preparing your insights...",
+  ],
+  professional: [
+    "Analyzing communication style...",
+    "Evaluating clarity and structure...",
+    "Measuring persuasiveness...",
+    "Checking professional tone...",
+    "Assessing authority signals...",
+    "Finalizing your assessment...",
+  ],
+};
 
 export default function VibeAuditTool() {
   const [inputText, setInputText] = useState("");
+  const [mode, setMode] = useState<AuditMode>("roast");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VibeResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,10 +51,10 @@ export default function VibeAuditTool() {
     if (!loading) return;
     setLoadingMsgIndex(0);
     const interval = setInterval(() => {
-      setLoadingMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+      setLoadingMsgIndex((prev) => (prev + 1) % LOADING_MESSAGES[mode].length);
     }, 2200);
     return () => clearInterval(interval);
-  }, [loading]);
+  }, [loading, mode]);
 
   // Auto-scroll to results
   useEffect(() => {
@@ -56,7 +76,7 @@ export default function VibeAuditTool() {
       const response = await fetch("/api/vibe-audit", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: inputText }),
+        body: JSON.stringify({ text: inputText, mode }),
       });
       const data = await response.json();
 
@@ -98,6 +118,24 @@ export default function VibeAuditTool() {
 
   return (
     <div>
+      {/* Mode selector */}
+      <div className="flex gap-2 mb-4">
+        {AUDIT_MODES.map((m) => (
+          <button
+            key={m.key}
+            onClick={() => { setMode(m.key); setResult(null); setError(null); }}
+            className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer border ${
+              mode === m.key
+                ? "bg-purple text-white border-purple"
+                : "bg-white text-muted border-gray-200 hover:border-purple hover:text-purple"
+            }`}
+          >
+            <span className="mr-1.5">{m.icon}</span>
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       {/* Textarea */}
       <div>
         <textarea
@@ -122,7 +160,7 @@ export default function VibeAuditTool() {
           disabled={!inputText.trim() || loading || (!bypassToken && remaining === 0)}
           className="px-6 py-2.5 rounded-lg bg-purple text-white font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-light transition-colors cursor-pointer min-w-[220px]"
         >
-          {loading ? LOADING_MESSAGES[loadingMsgIndex] : "Audit the vibes"}
+          {loading ? LOADING_MESSAGES[mode][loadingMsgIndex] : "Audit the vibes"}
         </button>
         {inputText && !loading && (
           <button
@@ -147,7 +185,7 @@ export default function VibeAuditTool() {
       )}
 
       {/* Sample texts */}
-      <SampleTexts onSelect={handleSampleSelect} />
+      <SampleTexts mode={mode} onSelect={handleSampleSelect} />
 
       {/* Error state */}
       {error && (

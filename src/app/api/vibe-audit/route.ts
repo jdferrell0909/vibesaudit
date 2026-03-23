@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { globalRateLimiter, checkUserLimit, isBypassToken } from "@/lib/rate-limit";
 import { sanitizeInput } from "@/lib/sanitize";
-import { VIBE_AUDIT_SYSTEM_PROMPT, buildUserMessage } from "@/lib/prompt";
+import { getSystemPrompt, buildUserMessage } from "@/lib/prompt";
+import type { AuditMode } from "@/lib/types";
 import { vibeResultSchema } from "@/lib/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -74,6 +75,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const VALID_MODES: AuditMode[] = ["roast", "life-coach", "professional"];
+    const mode: AuditMode = VALID_MODES.includes(body.mode) ? body.mode : "roast";
+
     const sanitized = sanitizeInput(body.text);
     if ("error" in sanitized) {
       return NextResponse.json({ error: sanitized.error }, { status: 400 });
@@ -83,7 +87,7 @@ export async function POST(request: NextRequest) {
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
-      system: VIBE_AUDIT_SYSTEM_PROMPT,
+      system: getSystemPrompt(mode),
       messages: [
         { role: "user", content: buildUserMessage(sanitized.text) },
       ],
