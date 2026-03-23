@@ -32,29 +32,30 @@ export async function POST(request: NextRequest) {
 
       if (session.mode === "payment") {
         // One-time audit pack: increment credits by 10
-        const { data: profile, error: fetchError } = await supabaseAdmin
+        const { data: profile } = await supabaseAdmin
           .from("profiles")
           .select("audit_credits")
           .eq("id", userId)
-          .single();
-
-        if (fetchError) {
-          console.error("Failed to fetch profile for credit update:", fetchError);
-          break;
-        }
+          .maybeSingle();
 
         const currentCredits = profile?.audit_credits ?? 0;
 
         const { error: updateError } = await supabaseAdmin
           .from("profiles")
-          .update({ audit_credits: currentCredits + 10 })
-          .eq("id", userId);
+          .upsert(
+            { id: userId, audit_credits: currentCredits + 10 },
+            { onConflict: "id" }
+          );
 
         if (updateError) {
           console.error("Failed to update audit_credits:", updateError);
-        } else {
-          console.log("Credits updated:", currentCredits, "→", currentCredits + 10);
+          return NextResponse.json(
+            { error: "Credit update failed." },
+            { status: 500 }
+          );
         }
+
+        console.log("Credits updated:", currentCredits, "→", currentCredits + 10);
       } else if (session.mode === "subscription") {
         // Pro subscription: upgrade plan + store subscription ID
         await supabaseAdmin
