@@ -4,8 +4,10 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import type { VibeResult, AuditMode } from "@/lib/types";
 import { AUDIT_MODES } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 import SampleTexts from "./SampleTexts";
 import ResultsPanel from "./ResultsPanel";
+import PaywallModal from "./PaywallModal";
 
 const LOADING_MESSAGES: Record<AuditMode, string[]> = {
   roast: [
@@ -42,9 +44,26 @@ export default function VibeAuditTool() {
   const [error, setError] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
   const [loadingMsgIndex, setLoadingMsgIndex] = useState(0);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
   const bypassToken = useMemo(() => searchParams.get("token"), [searchParams]);
+  const supabase = useMemo(() => createClient(), []);
+
+  // Check auth state
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setIsSignedIn(!!data.user));
+  }, [supabase.auth]);
+
+  // Handle checkout return — reset remaining so button re-enables
+  useEffect(() => {
+    const checkout = searchParams.get("checkout");
+    if (checkout === "success" || checkout === "cancel") {
+      setRemaining(null);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [searchParams]);
 
   // Cycle loading messages
   useEffect(() => {
@@ -83,6 +102,7 @@ export default function VibeAuditTool() {
       if (!response.ok) {
         setError(data.error || "Something went wrong.");
         if (data.remaining !== undefined) setRemaining(data.remaining);
+        if (response.status === 429 && data.remaining === 0) setShowPaywall(true);
         return;
       }
 
@@ -175,13 +195,16 @@ export default function VibeAuditTool() {
       {/* Remaining audits / rate limit message */}
       {remaining !== null && remaining > 0 && (
         <p className="mt-2 text-xs text-muted">
-          {remaining} free audit{remaining !== 1 ? "s" : ""} remaining
+          {remaining} audit{remaining !== 1 ? "s" : ""} remaining
         </p>
       )}
       {remaining === 0 && !loading && (
-        <p className="mt-2 text-sm text-coral font-medium">
-          You&apos;ve used all 8 free audits. Subscribe for unlimited access.
-        </p>
+        <button
+          onClick={() => setShowPaywall(true)}
+          className="mt-2 text-sm text-coral font-medium hover:underline cursor-pointer"
+        >
+          You&apos;ve used all your free audits. Get more &rarr;
+        </button>
       )}
 
       {/* Sample texts */}
@@ -263,6 +286,23 @@ export default function VibeAuditTool() {
         <div ref={resultsRef}>
           <ResultsPanel result={result} inputText={inputText} />
         </div>
+      )}
+
+      {/* Paywall modal */}
+      {showPaywall && (
+        <PaywallModal
+          isSignedIn={isSignedIn}
+          onClose={() => setShowPaywall(false)}
+          onSignIn={() => {
+            setShowPaywall(false);
+            const email = prompt("Enter your email");
+            if (!email) return;
+            supabase.auth.signInWithOtp({
+              email,
+              options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+            });
+          }}
+        />
       )}
     </div>
   );

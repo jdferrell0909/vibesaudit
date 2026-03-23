@@ -22,14 +22,16 @@ export async function POST(request: NextRequest) {
 
     let plan: "free" | "pro" = "free";
     let remaining: number | null = null;
+    let auditCredits = 0;
 
     if (user) {
       const { data } = await supabase
         .from("profiles")
-        .select("plan")
+        .select("plan, audit_credits")
         .eq("id", user.id)
         .single();
       plan = (data?.plan as "free" | "pro") ?? "free";
+      auditCredits = data?.audit_credits ?? 0;
     }
 
     // ── Rate limiting ─────────────────────────────────
@@ -46,24 +48,31 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Per-user lifetime limit (8 free audits)
-      // Signed-in users: tracked by user ID in Redis
-      // Anonymous users: tracked by IP in Redis
-      const limitKey = user ? `user:${user.id}` : ip;
-      const userLimit = await checkUserLimit(limitKey);
-      if (!userLimit.success) {
-        return NextResponse.json(
-          {
-            error: user
-              ? "You've used all 8 free vibe audits. Subscribe for unlimited access."
-              : "You've used all 8 free vibe audits. Sign in and subscribe for unlimited access.",
-            remaining: 0,
-          },
-          { status: 429 }
-        );
-      }
+      // If user has purchased credits, use those first
+      if (user && auditCredits > 0) {
+        await supabase
+          .from("profiles")
+          .update({ audit_credits: auditCredits - 1 })
+          .eq("id", user.id);
+        remaining = auditCredits - 1;
+      } else {
+        // Fall through to Redis lifetime limit (5 free audits)
+        const limitKey = user ? `user:${user.id}` : ip;
+        const userLimit = await checkUserLimit(limitKey);
+        if (!userLimit.success) {
+          return NextResponse.json(
+            {
+              error: user
+                ? "You've used all your free vibe audits."
+                : "You've used all your free vibe audits. Sign in for more options.",
+              remaining: 0,
+            },
+            { status: 429 }
+          );
+        }
 
-      remaining = userLimit.remaining;
+        remaining = userLimit.remaining;
+      }
     }
 
     // ── Input sanitization ────────────────────────────

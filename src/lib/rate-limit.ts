@@ -3,7 +3,7 @@ import { Redis } from "@upstash/redis";
 
 const redis = Redis.fromEnv();
 
-const USER_LIFETIME_LIMIT = 8;
+const USER_LIFETIME_LIMIT = 5;
 const BYPASS_TOKEN = process.env.BYPASS_TOKEN ?? "";
 
 export function isBypassToken(token: string | null): boolean {
