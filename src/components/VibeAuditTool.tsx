@@ -142,7 +142,7 @@ export default function VibeAuditTool() {
       )}
       {remaining === 0 && !loading && (
         <p className="mt-2 text-sm text-coral font-medium">
-          You&apos;ve used all 10 free audits. Paid access coming soon!
+          You&apos;ve used all 8 free audits. Subscribe for unlimited access.
         </p>
       )}
 

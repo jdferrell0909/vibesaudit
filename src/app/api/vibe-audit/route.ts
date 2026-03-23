@@ -4,6 +4,7 @@ import { globalRateLimiter, checkUserLimit, isBypassToken } from "@/lib/rate-lim
 import { sanitizeInput } from "@/lib/sanitize";
 import { VIBE_AUDIT_SYSTEM_PROMPT, buildUserMessage } from "@/lib/prompt";
 import { vibeResultSchema } from "@/lib/schema";
+import { createClient } from "@/lib/supabase/server";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -14,8 +15,25 @@ export async function POST(request: NextRequest) {
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
     const bypass = isBypassToken(request.headers.get("x-bypass-token"));
 
-    // ── Global rate limit: 50/hour ──────────────────────────
-    if (!bypass) {
+    // ── Identify user ─────────────────────────────────
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    let plan: "free" | "pro" = "free";
+    let remaining: number | null = null;
+
+    if (user) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("plan")
+        .eq("id", user.id)
+        .single();
+      plan = (data?.plan as "free" | "pro") ?? "free";
+    }
+
+    // ── Rate limiting ─────────────────────────────────
+    if (!bypass && plan !== "pro") {
+      // Global rate limit: 50/hour
       const global = await globalRateLimiter.limit("global");
       if (!global.success) {
         return NextResponse.json(
@@ -26,21 +44,28 @@ export async function POST(request: NextRequest) {
           { status: 429 }
         );
       }
+
+      // Per-user lifetime limit (8 free audits)
+      // Signed-in users: tracked by user ID in Redis
+      // Anonymous users: tracked by IP in Redis
+      const limitKey = user ? `user:${user.id}` : ip;
+      const userLimit = await checkUserLimit(limitKey);
+      if (!userLimit.success) {
+        return NextResponse.json(
+          {
+            error: user
+              ? "You've used all 8 free vibe audits. Subscribe for unlimited access."
+              : "You've used all 8 free vibe audits. Sign in and subscribe for unlimited access.",
+            remaining: 0,
+          },
+          { status: 429 }
+        );
+      }
+
+      remaining = userLimit.remaining;
     }
 
-    // ── Per-user lifetime limit: 10 free ────────────────────
-    const user = bypass ? null : await checkUserLimit(ip);
-    if (user && !user.success) {
-      return NextResponse.json(
-        {
-          error: "You've used all 10 free vibe audits. Want unlimited? Paid access coming soon.",
-          remaining: 0,
-        },
-        { status: 429 }
-      );
-    }
-
-    // ── Layer 3: Input Sanitization ─────────────────────────
+    // ── Input sanitization ────────────────────────────
     const body = await request.json().catch(() => null);
     if (!body || typeof body.text !== "string") {
       return NextResponse.json(
@@ -54,7 +79,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: sanitized.error }, { status: 400 });
     }
 
-    // ── Layer 4: Hardened Prompt → Anthropic API ────────────
+    // ── Claude API call ───────────────────────────────
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
@@ -69,7 +94,7 @@ export async function POST(request: NextRequest) {
       .map((block) => block.text)
       .join("");
 
-    // ── Layer 5: Output Validation ──────────────────────────
+    // ── Output validation ─────────────────────────────
     let parsed: unknown;
     try {
       const cleaned = rawText.replace(/```json|```/g, "").trim();
@@ -91,10 +116,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Return validated, sanitized result ───────────────────
+    // ── Return validated result ───────────────────────
     return NextResponse.json({
       result: result.data,
-      remaining: user?.remaining ?? null,
+      plan,
+      remaining: plan === "pro" ? null : remaining,
     });
   } catch (error) {
     console.error("Vibe audit error:", error);

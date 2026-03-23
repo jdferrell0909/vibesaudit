@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import VibeAuditTool from "@/components/VibeAuditTool";
+import AuthButton from "@/components/AuthButton";
 import Footer from "@/components/Footer";
 
 const jsonLd = {
@@ -33,7 +34,7 @@ const faqs = [
   },
   {
     q: "Is Vibes Audit free?",
-    a: "Yes. Every user gets 10 free vibe audits. Paste your text, get your results — no signup required.",
+    a: "Every user gets 8 free vibe audits — no signup required. After that, unlimited audits are available for $4/month.",
   },
 ];
 
@@ -62,7 +63,11 @@ export default function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
 
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-8">
+      <header className="w-full max-w-3xl mx-auto px-4 sm:px-6 pt-4 flex justify-end">
+        <AuthButton />
+      </header>
+
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 pt-8 sm:pt-16 pb-8">
         <div className="text-center mb-8 sm:mb-12">
           <h1 className="font-heading text-5xl sm:text-6xl font-bold tracking-tight text-foreground">
             vibes audit

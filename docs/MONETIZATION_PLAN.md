@@ -49,30 +49,24 @@
 
 ## Proposed Model
 
-### Freemium with Feature Gating + Usage Caps
+### Usage Cap + Subscription
 
 **Free tier (no account required):**
 
-- 5 audits per day (daily reset, tracked by IP for anonymous users or by account if signed in)
-- Basic results only: overall vibe, emoji, tags, vibe summary
-- No sharing, no radar chart, no per-dimension score breakdown
+- 8 lifetime audits (tracked by IP for anonymous users, by account if signed in)
+- Full results — no feature gating. Everyone sees the same output.
 
-**Pro tier — $7/mo or $49/yr:**
+**Pro tier — $4/mo:**
 
 - Unlimited audits
-- Full score breakdown (all 6 dimensions with labels)
-- Radar chart visualization
-- Share/download results card
-- Author archetype
-- Audit history (last 50)
+- Same full results (the paywall is quantity, not quality)
 
 ### Why This Model
 
-1. **Free tier is generous enough to go viral.** The overall vibe ("Corporate Dad Energy 🎩") + summary + tags is the shareable hook. People can still use it and talk about it without paying.
-2. **Detail is gated, not the core experience.** Users see the value before hitting the paywall — they know what they're missing.
-3. **Daily reset keeps free users coming back** instead of the current lifetime cap that permanently locks out free users.
-4. **$7/mo is impulse-buy range.** No procurement approval, no budget discussion. Low enough to convert casual users, high enough to cover Claude API costs with margin.
-5. **Annual discount ($49 vs $84)** rewards commitment and reduces churn.
+1. **No feature gating.** The full result is the product — gating the radar chart or scores doesn't add enough perceived value to convert. The paywall is simply "you're out of free tries."
+2. **8 free audits** is enough to understand the product and share it, but not enough to use it as a regular tool without paying.
+3. **$4/mo is impulse-buy range.** Low enough to not think about it, high enough to cover Claude API costs with margin.
+4. **Subscription (not one-time)** allows for future feature expansion. Can always add a higher tier later.
 
 ---
 
