@@ -6,7 +6,7 @@ import { getSystemPrompt, buildUserMessage } from "@/lib/prompt";
 import type { AuditMode } from "@/lib/types";
 import { vibeResultSchema } from "@/lib/schema";
 import { createClient } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
       // If user has purchased credits, use those first
       if (user && auditCredits > 0) {
-        await supabaseAdmin
+        await getSupabaseAdmin()
           .from("profiles")
           .update({ audit_credits: auditCredits - 1 })
           .eq("id", user.id);

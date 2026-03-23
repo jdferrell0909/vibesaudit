@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
-const PRICE_MAP = {
-  "audit-pack": {
-    priceId: process.env.STRIPE_PRICE_AUDIT_PACK!,
-    mode: "payment" as const,
-  },
-  pro: {
-    priceId: process.env.STRIPE_PRICE_PRO!,
-    mode: "subscription" as const,
-  },
-};
+function getPriceMap() {
+  return {
+    "audit-pack": {
+      priceId: process.env.STRIPE_PRICE_AUDIT_PACK!,
+      mode: "payment" as const,
+    },
+    pro: {
+      priceId: process.env.STRIPE_PRICE_PRO!,
+      mode: "subscription" as const,
+    },
+  };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,13 +26,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => null);
-    const priceType = body?.priceType as keyof typeof PRICE_MAP;
+    const priceMap = getPriceMap();
+    const priceType = body?.priceType as keyof ReturnType<typeof getPriceMap>;
 
-    if (!priceType || !PRICE_MAP[priceType]) {
+    if (!priceType || !priceMap[priceType]) {
       return NextResponse.json({ error: "Invalid price type." }, { status: 400 });
     }
 
-    const { priceId, mode } = PRICE_MAP[priceType];
+    const { priceId, mode } = priceMap[priceType];
 
     // Look up or create Stripe customer
     const { data: profile } = await supabase
@@ -42,13 +45,13 @@ export async function POST(request: NextRequest) {
     let customerId = profile?.stripe_customer_id;
 
     if (!customerId) {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: user.email,
         metadata: { supabase_user_id: user.id },
       });
       customerId = customer.id;
 
-      await supabaseAdmin
+      await getSupabaseAdmin()
         .from("profiles")
         .update({ stripe_customer_id: customerId })
         .eq("id", user.id);
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       client_reference_id: user.id,
       line_items: [{ price: priceId, quantity: 1 }],
