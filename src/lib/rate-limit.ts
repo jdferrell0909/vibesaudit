@@ -18,7 +18,7 @@ export const globalRateLimiter = new Ratelimit({
   prefix: "vibe-audit-global",
 });
 
-// Per-user lifetime counter (10 free, then pay)
+// Per-user lifetime counter (5 free, then pay)
 export async function checkUserLimit(ip: string) {
   const key = `vibe-audit-user:${ip}`;
   const count = await redis.incr(key);
