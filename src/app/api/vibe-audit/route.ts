@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { globalRateLimiter, checkUserLimit, isBypassToken } from "@/lib/rate-limit";
+import { ipRateLimiter, checkUserLimit, isBypassToken } from "@/lib/rate-limit";
 import { sanitizeInput } from "@/lib/sanitize";
 import { getSystemPrompt, buildUserMessage } from "@/lib/prompt";
 import type { AuditMode } from "@/lib/types";
@@ -14,7 +14,7 @@ const anthropic = new Anthropic({
 
 export async function POST(request: NextRequest) {
   try {
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const ip = request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
     const bypass = isBypassToken(request.headers.get("x-bypass-token"));
 
     // ── Identify user ─────────────────────────────────
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
 
     // ── Rate limiting ─────────────────────────────────
     if (!bypass && plan !== "pro") {
-      // Global rate limit: 50/hour
-      const global = await globalRateLimiter.limit("global");
+      // Per-IP rate limit: 50/hour
+      const global = await ipRateLimiter.limit(ip);
       if (!global.success) {
         return NextResponse.json(
           {
@@ -51,11 +51,11 @@ export async function POST(request: NextRequest) {
 
       // If user has purchased credits, use those first
       if (user && auditCredits > 0) {
-        await getSupabaseAdmin()
-          .from("profiles")
-          .update({ audit_credits: auditCredits - 1 })
-          .eq("id", user.id);
-        remaining = auditCredits - 1;
+        const { data: newCredits } = await getSupabaseAdmin().rpc("adjust_audit_credits", {
+          user_id: user.id,
+          delta: -1,
+        });
+        remaining = newCredits ?? auditCredits - 1;
       } else {
         // Fall through to Redis lifetime limit (5 free audits)
         const limitKey = user ? `user:${user.id}` : ip;
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       const cleaned = rawText.replace(/```json|```/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      console.error("Failed to parse Claude response as JSON:", rawText.slice(0, 200));
+      console.error("Failed to parse Claude response as JSON");
       return NextResponse.json(
         { error: "Vibe analysis returned unexpected format. Try again." },
         { status: 502 }
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     const result = vibeResultSchema.safeParse(parsed);
     if (!result.success) {
-      console.error("Zod validation failed:", result.error.flatten());
+      console.error("Zod validation failed");
       return NextResponse.json(
         { error: "Vibe analysis returned invalid data. Try again." },
         { status: 502 }
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       remaining: plan === "pro" ? null : remaining,
     });
   } catch (error) {
-    console.error("Vibe audit error:", error);
+    console.error("Vibe audit error:", error instanceof Error ? error.message : "unknown");
     return NextResponse.json(
       { error: "Something went wrong. The vibes were too powerful." },
       { status: 500 }

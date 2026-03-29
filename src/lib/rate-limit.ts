@@ -10,12 +10,12 @@ export function isBypassToken(token: string | null): boolean {
   return BYPASS_TOKEN.length > 0 && token === BYPASS_TOKEN;
 }
 
-// Global cap: 50 requests per hour across all users
-export const globalRateLimiter = new Ratelimit({
+// Per-IP cap: 50 requests per hour
+export const ipRateLimiter = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(50, "1 h"),
   analytics: true,
-  prefix: "vibe-audit-global",
+  prefix: "vibe-audit-ip",
 });
 
 // Per-user lifetime counter (5 free, then pay)

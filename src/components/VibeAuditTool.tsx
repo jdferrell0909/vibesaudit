@@ -48,7 +48,6 @@ export default function VibeAuditTool() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
-  const bypassToken = useMemo(() => searchParams.get("token"), [searchParams]);
   const supabase = useMemo(() => createClient(), []);
 
   // Check auth state
@@ -90,7 +89,6 @@ export default function VibeAuditTool() {
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (bypassToken) headers["x-bypass-token"] = bypassToken;
 
       const response = await fetch("/api/vibe-audit", {
         method: "POST",
@@ -177,7 +175,7 @@ export default function VibeAuditTool() {
       <div className="flex items-center gap-3 mt-3">
         <button
           onClick={analyzeVibe}
-          disabled={!inputText.trim() || loading || (!bypassToken && remaining === 0)}
+          disabled={!inputText.trim() || loading || remaining === 0}
           className="px-6 py-2.5 rounded-lg bg-purple text-white font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-purple-light transition-colors cursor-pointer min-w-[220px]"
         >
           {loading ? LOADING_MESSAGES[mode][loadingMsgIndex] : "Audit the vibes"}

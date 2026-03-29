@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         .eq("id", user.id);
     }
 
-    const origin = request.headers.get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
+    const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
     const session = await getStripe().checkout.sessions.create({
       customer: customerId,
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Stripe checkout error:", error);
+    console.error("Stripe checkout error:", error instanceof Error ? error.message : "unknown");
     return NextResponse.json(
       { error: "Failed to create checkout session." },
       { status: 500 },
