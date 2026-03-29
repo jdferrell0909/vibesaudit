@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 interface PaywallModalProps {
   isSignedIn: boolean;
   onClose: () => void;
-  onSignIn: () => void;
+  onSignIn: (email: string) => void;
 }
 
 export default function PaywallModal({ isSignedIn, onClose, onSignIn }: PaywallModalProps) {
   const [loading, setLoading] = useState<"audit-pack" | "pro" | null>(null);
+  const [email, setEmail] = useState("");
+  const emailInputRef = useRef<HTMLInputElement>(null);
 
   const handlePurchase = async (priceType: "audit-pack" | "pro") => {
     setLoading(priceType);
@@ -42,15 +44,30 @@ export default function PaywallModal({ isSignedIn, onClose, onSignIn }: PaywallM
         </div>
 
         {!isSignedIn ? (
-          <div className="text-center">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (email) onSignIn(email);
+            }}
+            className="text-center"
+          >
             <p className="text-sm text-muted mb-4">Sign in to purchase audits.</p>
+            <input
+              ref={emailInputRef}
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full px-4 py-2.5 mb-3 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-purple/40 focus:border-purple"
+            />
             <button
-              onClick={onSignIn}
+              type="submit"
               className="px-6 py-2.5 rounded-lg bg-purple text-white font-medium text-sm hover:bg-purple-light transition-colors cursor-pointer"
             >
-              Sign in
+              Send sign-in link
             </button>
-          </div>
+          </form>
         ) : (
           <div className="grid grid-cols-2 gap-3">
             <button

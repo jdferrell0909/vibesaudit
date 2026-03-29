@@ -291,10 +291,8 @@ export default function VibeAuditTool() {
         <PaywallModal
           isSignedIn={isSignedIn}
           onClose={() => setShowPaywall(false)}
-          onSignIn={() => {
+          onSignIn={(email: string) => {
             setShowPaywall(false);
-            const email = prompt("Enter your email");
-            if (!email) return;
             supabase.auth.signInWithOtp({
               email,
               options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
